@@ -116,7 +116,6 @@ module AwsPricing
       #page = Net::HTTP.get_response(uri)
       if(!File.exists?( fs_cache_file ))
         FileUtils::mkdir_p(File.dirname( fs_cache_file ))
-        Log.debug(red( "URL: %s\t%s" % [uri, fs_cache_file] ))
         page = Net::HTTP.get_response(uri).body
         File.open( fs_cache_file, "w" ).puts( page )
       else
