@@ -19,6 +19,7 @@ module AwsPricing
   # information will be retrieved from Amazon via currently undocumented
   # json APIs.
   class PriceList
+    TMP_DIR = "/tmp"
     attr_accessor :regions
 
     def initialize
@@ -111,8 +112,17 @@ module AwsPricing
 
     def fetch_url(url)
       uri = URI.parse(url)
-      page = Net::HTTP.get_response(uri)
-      JSON.parse(page.body)
+      fs_cache_file = "%s%s" % [AwsPricing::PriceList::TMP_DIR, uri.path]
+      #page = Net::HTTP.get_response(uri)
+      if(!File.exists?( fs_cache_file ))
+        FileUtils::mkdir_p(File.dirname( fs_cache_file ))
+        Log.debug(red( "URL: %s\t%s" % [uri, fs_cache_file] ))
+        page = Net::HTTP.get_response(uri).body
+        File.open( fs_cache_file, "w" ).puts( page )
+      else
+        page = File.read( fs_cache_file )
+      end
+      JSON.parse(page)
     end
 
     EC2_BASE_URL = "http://aws.amazon.com/ec2/pricing/"
