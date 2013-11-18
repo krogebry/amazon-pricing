@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-$:.push File.expand_path("../lib", __FILE__)
+$:.push File.expand_path(File.join("..","lib"), __FILE__)
 require "amazon-pricing/version"
 
 Gem::Specification.new do |s|
@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.platform    = Gem::Platform::RUBY
   s.authors     = ["Joe Kinsella"]
   s.email       = ["joe.kinsella@gmail.com"]
-  s.homepage    = "http://github.com/sonian/amazon-pricing"
+  s.homepage    = "http://github.com/CloudHealth/amazon-pricing"
   s.summary     = "Amazon Web Services Pricing Ruby gem"
   s.description = "A Ruby library for retrieving pricing for Amazon Web Services"
   s.license     = 'MIT'

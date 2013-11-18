@@ -8,9 +8,9 @@ Dir[File.join(File.dirname(__FILE__), 'amazon-pricing/*.rb')].sort.each { |lib| 
 #
 # Ruby Gem Name::  amazon-pricing
 # Author::    Joe Kinsella (mailto:joe.kinsella@gmail.com)
-# Copyright:: Copyright (c) 2011-2012 Sonian
+# Copyright:: Copyright (c) 2011-2013 CloudHealth
 # License::   Distributes under the same terms as Ruby
-# Home::      http://github.com/sonian/amazon-pricing
+# Home::      http://github.com/CloudHealth/amazon-pricing
 #++
 module AwsPricing
 
@@ -18,16 +18,13 @@ module AwsPricing
   # Upon instantiating a PriceList object, all the corresponding pricing
   # information will be retrieved from Amazon via currently undocumented
   # json APIs.
+<<<<<<< HEAD
   class PriceList
     TMP_DIR = "/tmp"
+=======
+    class PriceList
+>>>>>>> 28d1e285a8dd596551e9cc5579f327f1a09b1526
     attr_accessor :regions
-
-    def initialize
-      @_regions = {}
-      get_ec2_on_demand_instance_pricing
-      get_ec2_reserved_instance_pricing
-      fetch_ec2_ebs_pricing
-    end
 
     def get_region(name)
       @_regions[@@Region_Lookup[name] || name]
@@ -41,6 +38,12 @@ module AwsPricing
       region = get_region(region_name)
       raise "Region #{region_name} not found" if region.nil?
       region.get_instance_type(api_name)
+    end
+
+    def fetch_url(url)
+      uri = URI.parse(url)
+      page = Net::HTTP.get_response(uri)
+      JSON.parse(page.body)
     end
 
     protected
@@ -58,6 +61,33 @@ module AwsPricing
         add_region(region)
       end
       region
+    end
+
+    EC2_BASE_URL = "http://aws.amazon.com/ec2/pricing/"
+    RDS_BASE_URL = "http://aws.amazon.com/rds/pricing/"
+
+    # Lookup allows us to map to AWS API region names
+    @@Region_Lookup = {
+      'us-east-1' => 'us-east',
+      'us-west-1' => 'us-west',
+      'us-west-2' => 'us-west-2',
+      'eu-west-1' => 'eu-ireland',
+      'ap-southeast-1' => 'apac-sin',
+      'ap-southeast-2' => 'apac-syd',
+      'ap-northeast-1' => 'apac-tokyo',
+      'sa-east-1' => 'sa-east-1'
+    }
+
+  end
+
+
+  class Ec2PriceList < PriceList
+    
+    def initialize
+      @_regions = {}
+      get_ec2_on_demand_instance_pricing
+      get_ec2_reserved_instance_pricing
+      fetch_ec2_ebs_pricing
     end
 
     protected
@@ -91,9 +121,9 @@ module AwsPricing
           # e.g. size = {"size"=>"xl", "valueColumns"=>[{"name"=>"mswinSQL", "prices"=>{"USD"=>"2.427"}}]}
           type['sizes'].each do |size|
             begin
-              api_name, name = InstanceType.get_name(type["type"], size["size"], type_of_instance != :ondemand)
-
-              region.add_or_update_instance_type(api_name, name, operating_system, type_of_instance, size)
+              api_name, name = Ec2InstanceType.get_name(type["type"], size["size"], type_of_instance != :ondemand)
+              
+              region.add_or_update_ec2_instance_type(api_name, name, operating_system, type_of_instance, size)
             rescue UnknownTypeError
               $stderr.puts "WARNING: encountered #{$!.message}"
             end
@@ -110,6 +140,7 @@ module AwsPricing
       end
     end
 
+<<<<<<< HEAD
     def fetch_url(url)
       uri = URI.parse(url)
       fs_cache_file = "%s%s" % [AwsPricing::PriceList::TMP_DIR, uri.path]
@@ -122,20 +153,131 @@ module AwsPricing
         page = File.read( fs_cache_file )
       end
       JSON.parse(page)
+=======
+  end
+
+  class RdsPriceList < PriceList
+    
+    def initialize
+      @_regions = {}
+       get_rds_on_demand_instance_pricing
+       get_rds_reserved_instance_pricing
+>>>>>>> 28d1e285a8dd596551e9cc5579f327f1a09b1526
     end
 
-    EC2_BASE_URL = "http://aws.amazon.com/ec2/pricing/"
+    protected
 
-    # Lookup allows us to map to AWS API region names
-    @@Region_Lookup = {
-      'us-east-1' => 'us-east',
-      'us-west-1' => 'us-west',
-      'us-west-2' => 'us-west-2',
-      'eu-west-1' => 'eu-ireland',
-      'ap-southeast-1' => 'apac-sin',
-      'ap-southeast-2' => 'apac-syd',
-      'ap-northeast-1' => 'apac-tokyo',
-      'sa-east-1' => 'sa-east-1'
-    }
+    @@DB_TYPE = [:mysql, :oracle, :sqlserver]
+    @@RES_TYPES = [:light, :medium, :heavy]
+    
+    @@OD_DB_DEPLOY_TYPE = {
+                           :mysql=> {:mysql=>["standard","multiAZ"]},
+                           :oracle=> {:oracle_se1=>["li-standard","li-multiAZ","byol-standard","byol-multiAZ"], :oracle_se=>["byol-standard","byol-multiAZ"], :oracle_ee=>["byol-standard","byol-multiAZ"]},
+                           :sqlserver=> {:sqlserver_ex=>["li-ex"], :sqlserver_web=>["li-web"], :sqlserver_se=>["li-se", "byol"], :sqlserver_ee=>["byol"]}
+                        }
+
+
+    @@RESERVED_DB_DEPLOY_TYPE = {
+                           :oracle=> {:oracle_se1=>["li","byol"], :oracle_se=>["byol"], :oracle_ee=>["byol"]},
+                           :sqlserver=> {:sqlserver_ex=>["li-ex"], :sqlserver_web=>["li-web"], :sqlserver_se=>["li-se","byol"], :sqlserver_ee=>["byol"]}
+                          }
+
+    
+    def is_multi_az?(type)
+      return true if type.match("multiAZ")
+      false
+    end
+
+    def is_byol?(type)
+      return true if type.match("byol")
+      false
+    end                                  
+
+    def get_rds_on_demand_instance_pricing
+      @@DB_TYPE.each do |db|
+        @@OD_DB_DEPLOY_TYPE[db].each {|db_type, db_instances|
+          db_instances.each do |dp_type|
+            #
+            # to find out the byol type
+            is_byol = is_byol? dp_type
+
+            if db == :mysql or db == :oracle
+              fetch_on_demand_rds_instance_pricing(RDS_BASE_URL+"#{db}/pricing-#{dp_type}-deployments.json",:ondemand, db_type, is_byol)
+            elsif db == :sqlserver
+              fetch_on_demand_rds_instance_pricing(RDS_BASE_URL+"#{db}/sqlserver-#{dp_type}-ondemand.json",:ondemand, db_type, is_byol)
+            end
+          end
+        }
+      end
+    end
+
+    def get_rds_reserved_instance_pricing
+       @@DB_TYPE.each do |db|
+        if db == :mysql
+          @@RES_TYPES.each do |res_type|
+            fetch_reserved_rds_instance_pricing(RDS_BASE_URL+"#{db}/pricing-#{res_type}-utilization-reserved-instances.json", res_type, db, false)
+          end
+        else
+          @@RESERVED_DB_DEPLOY_TYPE[db].each {|db_type, db_instance|
+            @@RES_TYPES.each do |res_type|
+              db_instance.each do |dp_type|
+                is_byol = is_byol? dp_type
+                if db == :oracle
+                  fetch_reserved_rds_instance_pricing(RDS_BASE_URL+"#{db}/pricing-#{dp_type}-#{res_type}-utilization-reserved-instances.json", res_type, db_type, is_byol) 
+                elsif db == :sqlserver
+                  fetch_reserved_rds_instance_pricing(RDS_BASE_URL+"#{db}/sqlserver-#{dp_type}-#{res_type}-ri.json", res_type, db_type, is_byol)
+                end
+              end    
+            end            
+          }
+        end
+      end
+    end
+
+    def fetch_on_demand_rds_instance_pricing(url, type_of_rds_instance, db_type, is_byol)
+      res = fetch_url(url)
+      res['config']['regions'].each do |reg|
+        region_name = reg['region']
+        region = find_or_create_region(region_name)
+        reg['types'].each do |type|
+          type['tiers'].each do |tier|
+            begin
+              #
+              # this is special case URL, it is oracle - multiAZ type of deployment but it doesn't have mutliAZ attributes in json.
+              if url == "http://aws.amazon.com/rds/pricing/oracle/pricing-li-multiAZ-deployments.json"
+                is_multi_az = true
+              else
+                is_multi_az = is_multi_az? type["name"]
+              end              
+              api_name, name = RdsInstanceType.get_name(type["name"], tier["name"], type_of_rds_instance != :ondemand)
+              
+              region.add_or_update_rds_instance_type(api_name, name, db_type, type_of_rds_instance, tier, is_multi_az, is_byol)
+            rescue UnknownTypeError
+              $stderr.puts "WARNING: encountered #{$!.message}"
+            end
+          end
+        end                        
+      end
+    end
+
+    def fetch_reserved_rds_instance_pricing(url, type_of_rds_instance, db_type, is_byol)
+      res = fetch_url(url)
+      res['config']['regions'].each do |reg|
+        region_name = reg['region']
+        region = find_or_create_region(region_name)
+        reg['instanceTypes'].each do |type|
+          type['tiers'].each do |tier|
+            begin
+                is_multi_az = is_multi_az? type["type"]
+                api_name, name = RdsInstanceType.get_name(type["type"], tier["size"], true)
+                
+                region.add_or_update_rds_instance_type(api_name, name, db_type, type_of_rds_instance, tier, is_multi_az, is_byol)
+            rescue UnknownTypeError
+              $stderr.puts "WARNING: encountered #{$!.message}"
+            end
+          end
+        end
+      end
+    end                              
   end
 end
